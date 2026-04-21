@@ -1,8 +1,10 @@
-# Profile Intelligence API
+# Profile Intelligence Query Engine (Stage 2)
 
-A production-ready **FastAPI** service that generates demographic profile insights (gender, age group, and nationality) from a given name using trusted public APIs.  
-Built for **HNG Internship (Backend Track)** and deployed on **Vercel** with **Neon PostgreSQL**.
+## Overview
 
+The Profile Intelligence Query Engine is a FastAPI-based system that allows users to create, store, and query user profiles using both **structured filters** and **natural language queries**.
+
+The system integrates external APIs for demographic enrichment and supports intelligent filtering via a lightweight NLP parser.
 ---
 
 ## Live API
@@ -10,217 +12,308 @@ Built for **HNG Internship (Backend Track)** and deployed on **Vercel** with **N
 **Base URL**
 
 
-https://profile-intelligence-ruby.vercel.app/
-
+https://intelligence-query-engine.vercel.app/
 
 ---
 
 ## Features
 
--  Infers **gender**, **age**, and **country** from a name
--  Computes **age group** classification
--  Idempotent profile creation (no duplicate names)
--  Persistent storage with **PostgreSQL (Neon)**
--  All timestamps in **UTC ISO 8601**
--  FastAPI with async HTTP requests
--  Production deployment on **Vercel**
+- Create user profiles with enriched data (gender, age, country)
+- Retrieve profiles using:
+  - Structured query parameters
+  - Natural language queries (`q`)
+- Delete and fetch individual profiles
+- Pagination, sorting, and filtering support
+- Lightweight NLP-based query interpretation
+- Duplicate prevention (idempotent profile creation)
+- Clean JSON API responses
 
 ---
 
 ## Tech Stack
 
-| Layer        | Technology |
-|-------------|------------|
-| Framework   | FastAPI |
-| Database    | PostgreSQL (Neon) |
-| ORM         | SQLAlchemy |
-| HTTP Client | httpx |
-| Deployment  | Vercel |
-| Python      | 3.10+ |
+- Python 3.10+
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- httpx (async API calls)
+- Uvicorn
 
 ---
 
 ## Project Structure
 
-
-profile_intelligence/
+```
+Intelligence_query_engine/
 │
-
-├── main.py # FastAPI app & routes
-
-├── models.py # SQLAlchemy models
-
-├── database.py # Database engine & session
-
-├── crud.py # Database operations
-
-├── utils.py # UUID, UTC timestamps, helpers
-
-├── requirements.txt # Python dependencies
-
-├── vercel.json # Vercel configuration
-
-├── .env # Environment variable template
-
-├── .gitignore # Environment variable template
-
+├── main.py              # FastAPI routes
+├── models.py            # SQLAlchemy models
+├── database.py          # DB connection setup
+├── crud.py              # Database operations
+├── utils.py             # Helper functions (uuid, time, age group)
+├── nlp_parser.py        # Natural language parser
+├── seed.py              # Database seeder
+├── seed_profiles.json   # Dataset
 └── README.md
-
-
----
-
-## Environment Variables
-
-Create a `.env` file locally (do NOT commit it):
-
-
-DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST/DATABASE?sslmode=require
-
-ENV=development
-
-
-Add the same variables on **Vercel** via:
-
-
-Project → Settings → Environment Variables
-
+```
 
 ---
 
-## Local Installation
+## Setup Instructions
 
-### Clone the Repository
+### 1. Clone repository
 
+```bash
+git clone <repo-url>
+cd Intelligence_query_engine
+```
 
-git clone https://github.com/your-username/profile_intelligence.git
+---
 
-cd profile_intelligence
+### 2. Create virtual environment
 
+```bash
+python -m venv profilenv
+source profilenv/Scripts/activate   # Windows
+```
 
-### Create Virtual Environment
+---
 
+### 3. Install dependencies
 
-python -m venv venv
-source venv/bin/activate # Windows: venv\Scripts\activate
-
-
-### Install Dependencies
-
-
+```bash
 pip install -r requirements.txt
-
+```
 
 ---
 
-## Run Locally
+### 4. Configure environment variables
 
+Create a `.env` file:
 
+```env
+DATABASE_URL=postgresql+psycopg2://username:password@localhost:5432/profiles_db
+ENV=development
+```
+
+---
+
+### 5. Run database setup
+
+Tables are auto-created in development mode.
+
+---
+
+### 6. Start server
+
+```bash
 uvicorn main:app --reload
-
-
-Access:
-
-- Swagger Docs → http://127.0.0.1:8000/docs  
-- OpenAPI Spec → http://127.0.0.1:8000/openapi.json  
+```
 
 ---
 
-## API Endpoints
+### 7. Seed database
 
-### Create Profile
+```bash
+python seed.py
+```
 
-**POST** `/api/profiles`
+---
 
-**Request Body**
+##  API Endpoints
+
+### 🔹 Create Profile
+
+```
+POST /api/profiles
+```
+
+**Request body**
 ```json
 {
   "name": "emmanuel"
 }
-
-Response (201 Created)
-
-{
-  "status": "success",
-  "data": {
-    "id": "019d9b9b-1ee2-0000-0000-762b8269747b",
-    "name": "emmanuel",
-    "gender": "male",
-    "gender_probability": 0.99,
-    "sample_size": 12345,
-    "age": 32,
-    "age_group": "adult",
-    "country_id": "NG",
-    "country_probability": 0.87,
-    "created_at": "2026-04-17T14:22:10Z"
-  }
-}
 ```
 
-## Get All Profiles
+---
 
-**GET** `/api/profiles`
+### 🔹 Get Profiles (Structured Filters)
 
-### Optional Query Parameters
-- `gender`
-- `country_id`
-- `age_group`
+```
+GET /api/profiles?gender=male&country_id=NG
+```
 
-**Response (200 OK)**
+---
+
+### 🔹 Natural Language Query
+
+```
+GET /api/profiles?q=male adults from Nigeria
+```
+
+---
+
+### 🔹 Get Single Profile
+
+```
+GET /api/profiles/{id}
+```
+
+---
+
+### 🔹 Delete Profile
+
+```
+DELETE /api/profiles/{id}
+```
+
+---
+
+## Natural Language Parsing Approach
+
+### Overview
+
+The system uses a lightweight **rule-based NLP parser** implemented in `nlp_parser.py`.
+
+Its purpose is to convert natural language input into structured database filters.
+
+---
+
+### How the Parser Works
+
+#### 1. Text Normalization
+- Converts input to lowercase
+- Trims whitespace
+
+Example:
+```
+"Male Adults From Nigeria"
+→ "male adults from nigeria"
+```
+
+---
+
+#### 2. Keyword Detection
+
+The parser scans the query string for predefined keywords and maps them to filters.
+
+---
+
+## Supported Keywords and Mappings
+
+### Gender Keywords
+
+| Keyword(s) | Applied Filter |
+|----------|---------------|
+| male, man, men | gender = "male" |
+| female, woman, women | gender = "female" |
+
+---
+
+### Age Group Keywords
+
+| Keyword | Applied Filter |
+|--------|--------------|
+| child | age_group = "child" |
+| teen, teenager | age_group = "teen" |
+| adult | age_group = "adult" |
+| senior, elderly | age_group = "senior" |
+
+---
+
+### Country Keywords
+
+| Keyword | Country Code |
+|-------|--------------|
+| nigeria | NG |
+| ghana | GH |
+| kenya | KE |
+| united kingdom, uk | GB |
+| united states, usa | US |
+
+Only predefined countries are supported.
+
+---
+
+### Parser Output Example
+
 ```json
 {
-  "status": "success",
-  "list of data": { ... }
+  "gender": "male",
+  "age_group": "adult",
+  "country_id": "NG"
 }
 ```
 
----
-
-### Get Profile
-
-**GET** `/api/profiles/{profile_id}`
-
-**Response (200 OK)**
-```json
-{
-  "status": "success",
-  "data": { ... }
-}
-```
-
-## Delete Profile
-
-**DELETE** `/api/profiles/{profile_id}`
-
-**Response:**  
-- `204 No Content` on successful deletion
+This output is passed directly into SQLAlchemy filters.
 
 ---
 
-## Timestamp Standard
+## Filter Application Logic
 
-All timestamps are:
-- UTC
-- ISO 8601 compliant
-- Stored and returned consistently
+All extracted filters are applied using **AND logic**.
 
-**Example:**
+---
 
-2026-04-17T14:22:10Z
+## Limitations and Edge Cases
+
+### 1. No Advanced NLP
+- Does not use machine learning or LLMs
+- Pure keyword-based matching
+
+---
+
+### 2. No Numeric Reasoning
+Unsupported:
+- “older than 30”
+- “between 20 and 40”
+
+Only predefined age groups are supported.
+
+---
+
+### 3. Limited Country Support
+- Only countries defined in `COUNTRY_MAP` are recognized
+
+---
+
+### 4. No Typo Handling
+- Misspellings are not detected
+- Example: `nigria`
+
+---
+
+### 5. No Logical Operators
+- Does not support OR / NOT
+- No nested or compound logic
+
+---
+
+### 6. Stateless Queries
+- Each query is independent
+- No session or conversational memory
+
+---
+
+## Design Decisions
+
+This system intentionally prioritizes:
+
+- Simplicity
+- Predictable behavior
+- Fast execution
+- Easy SQL mapping
+- Low compute cost
+
+Over:
+- Complex NLP
+- AI inference
+- Probabilistic interpretation
 
 
 ---
 
-## External APIs Used
-
-- **Gender prediction:** genderize.io  
-- **Age estimation:** agify.io  
-- **Nationality inference:** nationalize.io  
-
-Graceful error handling is implemented for upstream failures.
-
----
-
-## ☁️ Deployment (Vercel)
+## Deployment (Vercel)
 
 ### Install Vercel CLI
 
@@ -241,27 +334,18 @@ vercel
 
 vercel --prod
 
+---
+
+## Summary
+
+The Profile Intelligence Query Engine combines structured filtering with lightweight natural language parsing to provide flexible, efficient profile search functionality while maintaining clarity, predictability, and performance.
 
 ---
 
-## Database (Neon PostgreSQL)
+## Author Notes
 
-- Serverless PostgreSQL
-- SSL enabled
-- Compatible with Vercel
-- Connected via `psycopg[binary]`
+Built as part of the **Stage 2 submission** for the Profile Intelligence API challenge.
 
----
-
-## Task Compliance Checklist
-
-- ✔ FastAPI backend  
-- ✔ RESTful endpoints  
-- ✔ PostgreSQL persistence  
-- ✔ UTC ISO 8601 timestamps  
-- ✔ Deployed on Vercel  
-- ✔ Clean architecture  
-- ✔ Submission-ready documentation  
 
 ---
 
