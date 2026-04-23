@@ -15,15 +15,15 @@ def seed():
     inserted = 0
     skipped = 0
 
-    print(f"\n🚀 Starting seed process...")
-    print(f"📦 Total profiles to process: {total}\n")
+    print(f"\n Starting seed process...")
+    print(f" Total profiles to process: {total}\n")
 
     try:
         for i, p in enumerate(profiles, start=1):
 
             name = p["name"].strip().lower()
 
-            # 📊 progress tracker
+            #  progress tracker
             percent = (i / total) * 100
             print(f"[{i}/{total} - {percent:.2f}%] Processing: {name}")
 
@@ -50,7 +50,7 @@ def seed():
             db.add(profile)
             inserted += 1
 
-            print(f"   ↳ ✅ inserted\n")
+            print(f"   ↳ inserted\n")
 
         db.commit()
 
