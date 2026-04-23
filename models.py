@@ -20,26 +20,3 @@ class Profile(Base):
     country_probability = Column(Float, nullable=False)
     
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
-
-
-# from sqlalchemy import Column, String, Integer, Float, DateTime
-# from database import Base
-
-# class Profile(Base):
-#     __tablename__ = "profiles"
-
-#     id = Column(String, primary_key=True, index=True)
-#     name = Column(String, unique=True, index=True, nullable=False)
-
-#     gender = Column(String, nullable=False)
-#     gender_probability = Column(Float, nullable=False)
-#     sample_size = Column(Integer, nullable=False)
-
-#     age = Column(Integer, nullable=False)
-#     age_group = Column(String, nullable=False)
-
-#     country_id = Column(String, nullable=False)
-#     country_probability = Column(Float, nullable=False)
-
-#     created_at = Column(DateTime(timezone=True), nullable=False)
-

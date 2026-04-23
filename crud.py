@@ -67,6 +67,18 @@ def get_profiles(
         if "max_age" in filters:
             query = query.filter(Profile.age <= filters["max_age"])
 
+        # REQUIRED BY SPEC
+        if "min_gender_probability" in filters:
+            query = query.filter(
+                Profile.gender_probability >= filters["min_gender_probability"]
+            )
+
+        # REQUIRED BY SPEC
+        if "min_country_probability" in filters:
+            query = query.filter(
+                Profile.country_probability >= filters["min_country_probability"]
+            )
+
     total = query.count()
 
     if sort_by:
@@ -81,6 +93,47 @@ def get_profiles(
     data = query.offset(offset).limit(limit).all()
 
     return total, data
+
+# def get_profiles(
+#     db: Session,
+#     filters: dict | None,
+#     sort_by: str | None,
+#     order: str,
+#     page: int,
+#     limit: int,
+# ):
+#     query = db.query(Profile)
+
+#     if filters:
+#         if "gender" in filters:
+#             query = query.filter(Profile.gender == filters["gender"])
+
+#         if "age_group" in filters:
+#             query = query.filter(Profile.age_group == filters["age_group"])
+
+#         if "country_id" in filters:
+#             query = query.filter(Profile.country_id == filters["country_id"])
+
+#         if "min_age" in filters:
+#             query = query.filter(Profile.age >= filters["min_age"])
+
+#         if "max_age" in filters:
+#             query = query.filter(Profile.age <= filters["max_age"])
+
+#     total = query.count()
+
+#     if sort_by:
+#         column = SORT_FIELDS.get(sort_by)
+#         if not column:
+#             return None, None
+#         query = query.order_by(
+#             column.desc() if order == "desc" else column.asc()
+#         )
+
+#     offset = (page - 1) * limit
+#     data = query.offset(offset).limit(limit).all()
+
+#     return total, data
 
 
 # ---------- Write helpers ----------
