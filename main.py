@@ -1,9 +1,11 @@
-from fastapi import FastAPI, Depends, Response, Query, Request
+from fastapi import FastAPI, Depends, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import httpx
 import re
 import os
+import csv
+from io import StringIO
 
 from database import Base, engine, get_db
 from models import Profile
@@ -14,10 +16,9 @@ from nlp_parser import parse_query
 from auth.router import router as auth_router
 from auth.rbac import require_role
 from auth.guards import secure_request
+
 from core.responses import error
 from fastapi.responses import StreamingResponse
-import csv
-from io import StringIO
 
 # --------------------
 # DB INIT (DEV ONLY)
@@ -120,7 +121,7 @@ async def create_profile(
 
 
 # =========================================================
-# GET PROFILES (ADMIN + ANALYST)
+# LIST PROFILES
 # =========================================================
 @app.get("/api/profiles")
 def list_profiles(
@@ -211,7 +212,9 @@ def search_profiles(
     }
 
 
-
+# =========================================================
+# EXPORT CSV
+# =========================================================
 @app.get("/api/profiles/export")
 def export_profiles(
     format: str = "csv",
@@ -223,16 +226,10 @@ def export_profiles(
     user: dict = Depends(require_role("admin", "analyst")),
     _security: dict = Depends(secure_request),
 ):
-    """
-    Export profiles as CSV
-    """
 
     if format != "csv":
         return error("Only CSV format is supported", 400)
 
-    # -----------------------------
-    # BUILD FILTERS (same logic as list_profiles)
-    # -----------------------------
     if q:
         filters = parse_query(q)
         if not filters:
@@ -246,37 +243,23 @@ def export_profiles(
             }.items() if v is not None
         }
 
-    # -----------------------------
-    # GET ALL DATA (NO PAGINATION FOR EXPORT)
-    # -----------------------------
     total, data = get_profiles(
         db=db,
         filters=filters,
         page=1,
-        limit=10000,  # large safe cap for export
+        limit=10000,
     )
 
-    # -----------------------------
-    # CREATE CSV BUFFER
-    # -----------------------------
     output = StringIO()
     writer = csv.writer(output)
 
-    # Header row (REQUIRED BY SPEC)
     writer.writerow([
-        "id",
-        "name",
-        "gender",
-        "gender_probability",
-        "age",
-        "age_group",
-        "country_id",
-        "country_name",
-        "country_probability",
+        "id", "name", "gender", "gender_probability",
+        "age", "age_group",
+        "country_id", "country_name", "country_probability",
         "created_at",
     ])
 
-    # Data rows
     for p in data:
         writer.writerow([
             p.id,
@@ -293,18 +276,13 @@ def export_profiles(
 
     output.seek(0)
 
-    # -----------------------------
-    # RESPONSE HEADERS (CRITICAL FOR GRADING)
-    # -----------------------------
-    headers = {
-        "Content-Disposition": 'attachment; filename="profiles_export.csv"'
-    }
-
     return StreamingResponse(
         output,
         media_type="text/csv",
-        headers=headers
+        headers={"Content-Disposition": 'attachment; filename="profiles_export.csv"'}
     )
+
+
 # =========================================================
 # GET SINGLE PROFILE
 # =========================================================
@@ -315,6 +293,7 @@ def get_profile(
     user: dict = Depends(require_role("admin", "analyst")),
     _security: dict = Depends(secure_request),
 ):
+
     profile = get_by_id(db, profile_id)
 
     if not profile:
@@ -327,7 +306,7 @@ def get_profile(
 
 
 # =========================================================
-# DELETE PROFILE (ADMIN ONLY)
+# DELETE PROFILE
 # =========================================================
 @app.delete("/api/profiles/{profile_id}")
 def delete_profile(
@@ -336,6 +315,7 @@ def delete_profile(
     user: dict = Depends(require_role("admin")),
     _security: dict = Depends(secure_request),
 ):
+
     profile = get_by_id(db, profile_id)
 
     if not profile:

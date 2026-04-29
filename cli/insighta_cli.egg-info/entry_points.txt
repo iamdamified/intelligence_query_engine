@@ -1,0 +1,2 @@
+[console_scripts]
+insighta = insighta.main:app

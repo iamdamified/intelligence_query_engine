@@ -1,6 +1,7 @@
 import typer
 from insighta.auth.github import login_flow
 from insighta.auth.client import safe_request
+from insighta.auth.session import clear_session, load_tokens
 
 app = typer.Typer()
 
@@ -16,12 +17,34 @@ def login():
 
 @app.command()
 def logout():
-    print("Logging out... (to be implemented in Step 6.12)")
+    """Logout user locally and clear session."""
+    tokens = load_tokens()
+
+    if not tokens:
+        print("No active session found.")
+        return
+
+    try:
+        safe_request("POST", "/auth/logout", json={
+            "refresh_token": tokens.get("refresh_token")
+        })
+    except Exception:
+        pass
+
+    clear_session()
+    print("Logged out successfully.")
 
 
 @app.command()
 def whoami():
-    print("Fetching current user... (to be implemented in Step 6.12)")
+    """Fetch current authenticated user."""
+    response = safe_request("GET", "/auth/me")
+
+    if response.status_code != 200:
+        print("Not authenticated or session expired.")
+        return
+
+    print(response.json())
 
 
 # =========================
@@ -43,56 +66,33 @@ def profiles_list(
         "limit": limit,
     }
 
-    response = safe_request(
-        "GET",
-        "/api/profiles",
-        params={k: v for k, v in params.items() if v is not None},
-    )
+    clean_params = {k: v for k, v in params.items() if v is not None}
 
+    response = safe_request("GET", "/api/profiles", params=clean_params)
     print(response.json())
 
 
 @app.command()
 def profiles_search(query: str):
-    response = safe_request(
-        "GET",
-        "/api/profiles/search",
-        params={"q": query},
-    )
-
+    response = safe_request("GET", "/api/profiles/search", params={"q": query})
     print(response.json())
 
 
 @app.command()
 def profiles_get(profile_id: str):
-    response = safe_request(
-        "GET",
-        f"/api/profiles/{profile_id}",
-    )
-
+    response = safe_request("GET", f"/api/profiles/{profile_id}")
     print(response.json())
 
 
 @app.command()
 def profiles_create(name: str):
-    response = safe_request(
-        "POST",
-        "/api/profiles",
-        json={"name": name},
-    )
-
+    response = safe_request("POST", "/api/profiles", json={"name": name})
     print(response.json())
 
 
 @app.command()
 def profiles_export(format: str = "csv"):
-    response = safe_request(
-        "GET",
-        "/api/profiles/export",
-        params={"format": format},
-    )
-
-    # CSV is plain text, not JSON
+    response = safe_request("GET", "/api/profiles/export", params={"format": format})
     print(response.text)
 
 
