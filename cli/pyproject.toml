@@ -1,0 +1,10 @@
+[project]
+name = "cli"
+version = "0.1.0"
+dependencies = [
+    "typer",
+    "requests"
+]
+
+[project.scripts]
+insighta = "cli.insighta.main:app"
