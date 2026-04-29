@@ -1,676 +1,287 @@
-# Profile Intelligence Query Engine (Stage 2)
+# Insighta Labs+ Backend
+
+**Backend Engineering Track — Stage 3: Secure Access & Multi‑Interface Integration**
+
+---
 
 ## Overview
 
-The Profile Intelligence Query Engine is a FastAPI-based system that allows users to create, store, and query user profiles using both **structured filters** and **natural language queries**.
+This repository contains the **backend implementation for Stage 3 of Insighta Labs+**.  
+It extends the Stage 2 Profile Intelligence System into a **secure, production‑ready platform** that supports:
 
-The system integrates external APIs for demographic enrichment and supports intelligent filtering via a lightweight NLP parser.
----
+- Authentication via **GitHub OAuth (PKCE)**
+- **Role‑Based Access Control (RBAC)**
+- Secure session and token lifecycle management
+- Multi‑interface consumption (API, CLI, Web)
+- Rate limiting, logging, and API hardening
 
-## Live API
-
-**Base URL**
-
-
-https://intelligence-query-engine.vercel.app/
-
----
-
-## Features
-
-- Create user profiles with enriched data (gender, age, country)
-- Retrieve profiles using:
-  - Structured query parameters
-  - Natural language queries (`q`)
-- Delete and fetch individual profiles
-- Pagination, sorting, and filtering support
-- Lightweight NLP-based query interpretation
-- Duplicate prevention (idempotent profile creation)
-- Clean JSON API responses
+All functionality from **Stage 2** (filtering, sorting, pagination, and natural language search) is preserved with **no regressions**.
 
 ---
 
-## Tech Stack
+## Stage 3 Objectives (Backend Scope)
 
-- Python 3.10+
-- FastAPI
-- SQLAlchemy
-- PostgreSQL
-- httpx (async API calls)
-- Uvicorn
+The backend is responsible for:
 
----
-
-## Project Structure
-
-```
-Intelligence_query_engine/
-│
-├── main.py              # FastAPI routes
-├── models.py            # SQLAlchemy models
-├── database.py          # DB connection setup
-├── crud.py              # Database operations
-├── utils.py             # Helper functions (uuid, time, age group)
-├── nlp_parser.py        # Natural language parser
-├── seed.py              # Database seeder
-├── seed_profiles.json   # Dataset
-└── README.md
-```
+- Enforcing **authentication on all protected endpoints**
+- Managing **users, roles, and permissions**
+- Acting as the **single source of truth** for:
+  - API consumers
+  - CLI tool
+  - Web portal
+- Securing access with centralized guards and middleware
 
 ---
 
-## Setup Instructions
+## Architecture Summary
 
-### 1. Clone repository
-
-```bash
-git clone <repo-url>
-cd Intelligence_query_engine
 ```
+Client (CLI / Web)
+      ↓
+Authentication Layer (OAuth + Tokens)
+      ↓
+Authorization (RBAC Guards)
+      ↓
+API Layer (/api/*)
+      ↓
+Database (Profiles + Users)
+```
+
+Key architectural principles:
+
+- **Centralized security enforcement** (no scattered checks)
+- **Stateless access tokens** + **rotating refresh tokens**
+- Clear separation between authentication, authorization, and business logic
 
 ---
 
-### 2. Create virtual environment
+## Authentication System
 
-```bash
-python -m venv profilenv
-source profilenv/Scripts/activate   # Windows
-```
+### OAuth Provider
 
----
+- **GitHub OAuth** with **PKCE**
+- Supports:
+  - Browser‑based authentication (Web portal)
+  - CLI‑initiated authentication with callback capture
 
-### 3. Install dependencies
+### Auth Endpoints
 
-```bash
-pip install -r requirements.txt
-```
+| Method | Endpoint | Description |
+|------|--------|-------------|
+| GET | `/auth/github` | Redirects user to GitHub OAuth |
+| GET | `/auth/github/callback` | Handles OAuth callback, issues tokens |
+| POST | `/auth/refresh` | Rotates access & refresh tokens |
+| POST | `/auth/logout` | Invalidates refresh token |
 
----
+### Token Policy
 
-### 4. Configure environment variables
+| Token | Expiry |
+|-----|-------|
+| Access Token | 3 minutes |
+| Refresh Token | 5 minutes |
 
-Create a `.env` file:
-
-```env
-DATABASE_URL=postgresql+psycopg2://username:password@localhost:5432/profiles_db
-ENV=development
-```
-
----
-
-### 5. Run database setup
-
-Tables are auto-created in development mode.
+- Refresh tokens are **single‑use**
+- Old refresh tokens are **invalidated immediately**
+- New access + refresh tokens are issued on every refresh
 
 ---
 
-### 6. Start server
+## User System
 
-```bash
-uvicorn main:app --reload
-```
+A dedicated **users table** is introduced.
 
----
+### User Model
 
-### 7. Seed database
+| Field | Description |
+|----|----|
+| `id` | UUID v7 primary key |
+| `github_id` | Unique GitHub identifier |
+| `username` | GitHub username |
+| `email` | GitHub email (if available) |
+| `avatar_url` | GitHub avatar URL |
+| `role` | `admin` or `analyst` |
+| `is_active` | Soft‑disable flag |
+| `last_login_at` | Timestamp |
+| `created_at` | Timestamp |
 
-```bash
-python seed.py
-```
+### Default Role
 
----
-
-##  API Endpoints
-
-### 🔹 Create Profile
-
-```
-POST /api/profiles
-```
-
-**Request body**
-```json
-{
-  "name": "emmanuel"
-}
-```
+- New users default to: **`analyst`**
 
 ---
 
-### 🔹 Get Profiles (Structured Filters)
+## Role‑Based Access Control (RBAC)
 
-```
-GET /api/profiles?gender=male&country_id=NG
-```
+RBAC is enforced using **dependency‑based guards**.
 
----
+### Roles
 
-### 🔹 Natural Language Query
+| Role | Permissions |
+|----|------------|
+| `admin` | Full access (create, delete, read, export) |
+| `analyst` | Read‑only access |
 
-```
-GET /api/profiles/search?q=male adults from Nigeria
-```
+### Enforcement Strategy
 
----
+- All `/api/*` endpoints require authentication
+- Role checks are applied **centrally** using dependencies
+- Disabled users (`is_active = false`) receive **403 Forbidden**
 
-### 🔹 Get Single Profile
-
-```
-GET /api/profiles/{id}
-```
+This prevents authorization logic from being duplicated across endpoints.
 
 ---
 
-### 🔹 Delete Profile
+## API Security Enhancements
+
+### API Versioning (Required)
+
+All profile endpoints require the header:
 
 ```
-DELETE /api/profiles/{id}
+X-API-Version: 1
 ```
 
----
-##  Natural Language Parsing Approach
-
-The API exposes a search endpoint:
-
-```
-GET /api/profiles/search?q=<query>
-```
-
-The `q` parameter accepts **free text**, **key–value pairs**, or a **combination of both**.
-
-Internally, the query string is processed a **rule-based NLP parser** implemented in `nlp_parser.py` that 
-
-converts the raw input into a structured `filters` object.
-
-This object is then passed to a unified query builder that constructs the database query safely and consistently.
-
----
-
-
-### High-Level Flow
-
-1. Receive raw query string (`q`)
-2. Split input into tokens
-3. Identify structured filters (`key:value`)
-4. Treat remaining words as general keywords
-5. Build database query using parsed filters
-6. Apply pagination and sorting
-7. Return standardized response
-
-If the parser cannot extract any meaningful filters, the request fails gracefully with an error response.
-
----
-
-##  Supported Keywords and Filter Mapping
-
-### A. Key–Value Filters
-
-The parser supports explicit filters using the format:
-
-```
-key:value
-```
-
-Supported keys are predefined and mapped directly to database fields.
-
-| Keyword / Phrase | Maps To | Behavior |
-|-----------------|---------|----------|
-| `male`, `female` | `gender` | Exact match |
-| `child` | `age_group=child` | Exact match |
-| `teenager` | `age_group=teenager` | Exact match |
-| `adult` | `age_group=adult` | Exact match |
-| `senior` | `age_group=senior` | Exact match |
-| `young` | `min_age=16`, `max_age=24` | Derived range |
-| `above <age>` | `min_age` | Numeric comparison |
-| `below <age>` | `max_age` | Numeric comparison |
-| `from <country>` | `country_id` | ISO country mapping |
-
-**Example**
-
-```
-"young males from nigeria"
-→ gender=male + min_age=16 + max_age=24 + country_id=NG
-
-"females above 30"
-→ gender=female + min_age=30
-
-"adult males from kenya"
-→ gender=male + age_group=adult + country_id=KE
-```
-
----
-
-
-### B. Free Text (Natural Language Tokens)
-
-The search endpoint does **not** support arbitrary free‑text search across unrelated fields.
-Instead, any words in the query that are **not part of an explicit rule‑based pattern** are interpreted as **natural language tokens** and matched against a **fixed set of supported concepts**.
-
-Supported interpretations include:
-
-- Gender terms: `male`, `female`
-- Age group terms: `child`, `teenager`, `adult`, `senior`
-- Age descriptors:
-  - `young` → ages 16–24
-  - `above <number>` → minimum age
-  - `below <number>` → maximum age
-- Country names (mapped internally to ISO country codes)
-
-There is **no free‑text substring search** against fields like bio, skills, or arbitrary text.
-All interpretations must resolve to valid, predefined filters.
-
-**Example**
-
-```
-q=young males from nigeria
-```
-
-Produces structured filters equivalent to:
-
-```
-gender=male
-min_age=16
-max_age=24
-country_id=NG
-```
-
----
-
-### C. Combined Natural Language Queries
-
-The parser allows **multiple supported concepts to appear in a single sentence**.
-All extracted filters are combined using logical **AND** semantics.
-
-**Example**
-
-```
-q=adult females above 30 from kenya
-```
-
-Parsed as:
-
-- `gender = female`
-- `age_group = adult`
-- `min_age = 30`
-- `country_id = KE`
-
-Only queries that can be fully resolved into supported filters are accepted.
-Queries containing unsupported concepts or ambiguous terms are rejected with an error response.
-
-
----
-
-## Query Validation Logic
-
-- The parser extracts only **known, supported keys**
-- Unknown keys are ignored
-- Empty or unparseable queries are rejected
-
-If no valid filters or keywords are found, the API returns:
+Requests without this header are rejected:
 
 ```json
 {
   "status": "error",
-  "message": "Unable to interpret query"
+  "message": "API version header required"
 }
 ```
 
-This prevents unnecessary database scans and enforces predictable behavior.
-
 ---
 
-## 4. Pagination and Sorting
+## Profile APIs (Stage 3 Compliance)
 
-All parsed queries support pagination and optional sorting.
+### Create Profile (Admin Only)
 
-| Parameter | Description |
-|----------|-------------|
-| `page`   | Page number (default: 1) |
-| `limit`  | Items per page (default: 10, max: 50) |
-| `sort_by` | Optional field to sort by |
-| `order`  | `asc` or `desc` (default: `asc`) |
+- Endpoint: `POST /api/profiles`
+- Calls external enrichment APIs
+- Transforms and stores profile data
+- RBAC enforced (`admin` only)
 
-Pagination is applied **after** filters are resolved.
+### Read & Search Profiles
 
----
+- Filtering, sorting, pagination preserved from Stage 2
+- Natural language querying supported
+- Available to `admin` and `analyst`
 
-## 5. Limitations and Edge Cases
+### Pagination Response Format
 
-The current parser is intentionally simple and has known limitations.
+All paginated responses include:
 
-### Not Supported
-
-- Boolean operators (`AND`, `OR`, `NOT`)
-- Nested conditions
-- Parentheses or grouped expressions
-- Range queries (e.g. `age:20-30`)
-- Quoted phrases (`"machine learning"` treated as two words)
-- Fuzzy matching or typo correction
-- Natural language inference (e.g. “people near me”)
-
----
-
-### Edge Cases
-
-- Repeated keys result to last value wins
-- Misspelled keys are silently ignored
-- Ambiguous free text may return broader results
-- Very short keywords may produce noisy matches
-
-These trade-offs were accepted to keep the parser:
-
-- Predictable
-- Easy to maintain
-- Safe for database querying
-
----
-
-## 6. Design Rationale
-
-This approach was chosen to:
-
-- Avoid complex NLP dependencies
-- Keep filtering logic transparent
-- Centralize query construction
-- Ensure spec-compliant response shapes
-- Allow future extension with minimal refactoring
-
-The parser can be extended later to support advanced features without changing the API contract.
-
----
-
-## Summary of NLP Approach
-
--  Supports human-friendly search
--  Maps cleanly to database filters
--  Fails safely on invalid input
--  Fully documented limitations
-
-This ensures both **developer clarity** and **grader compliance**.
-
-## Design Decisions
-
-This system intentionally prioritizes:
-
-- Simplicity
-- Predictable behavior
-- Fast execution
-- Easy SQL mapping
-- Low compute cost
-
-Over:
-- Complex NLP
-- AI inference
-- Probabilistic interpretation
-
-
----
-
-## Deployment (Vercel)
-
-### Install Vercel CLI
-
-npm install -g vercel
-
-
-### Login
-
-vercel login
-
-
-### Deploy
-
-vercel
-
-
-### Production Deployment
-
-vercel --prod
-
----
-
-## stage 2 Summary
-
-The Profile Intelligence Query Engine combines structured filtering with lightweight natural language parsing to provide flexible, efficient profile search functionality while maintaining clarity, predictability, and performance.
-
----
-
-# Intelligence Query Engine — Stage 3 (Security & Authentication)
-
-## Overview
-
-Stage 3 of the **Intelligence Query Engine** focuses on **application security**, **authentication**, **authorization**, **rate limiting**, and **CLI-based secure access**.
-
-At this stage, the system ensures that:
-- Only authenticated users can access protected resources
-- API abuse is prevented through rate limiting
-- Tokens are securely issued, validated, and revoked
-- A CLI client can authenticate and interact securely with the backend
-- The backend is production-ready and deployable
-
----
-
-## Stage 3 Scope
-
-This stage implements the following:
-
-- Token-based authentication
-- Secure request guards
-- Role-aware access control foundation
-- Rate limiting middleware
-- Refresh token lifecycle management
-- Secure CLI authentication flow
-- Deployment-safe backend configuration
-
->  This README documents **Stage 3 only**.  
-> Stage 2 features are intentionally excluded.
-
----
-
-## Authentication & Authorization
-
-### Authentication Method
-- Bearer token authentication
-- Tokens are issued after successful login
-- Tokens must be sent with every protected request
-
-### Authorization Header Format
-```
-Authorization: Bearer <access_token>
-```
-
-Requests without valid tokens are rejected.
-
----
-
-## Authentication Endpoints
-
-### Login
-```
-POST /auth/login
-```
-
-**Response**
 ```json
 {
-  "access_token": "<token>",
-  "token_type": "bearer"
+  "status": "success",
+  "page": 1,
+  "limit": 10,
+  "total": 2026,
+  "total_pages": 203,
+  "links": {
+    "self": "/api/profiles?page=1&limit=10",
+    "next": "/api/profiles?page=2&limit=10",
+    "prev": null
+  },
+  "data": []
 }
 ```
 
-### Refresh Token
-```
-POST /auth/refresh
-```
-
-Rotates refresh tokens securely and issues a new access token.
-
-### Logout
-```
-POST /auth/logout
-```
-
-Revokes the refresh token and ends the session.
-
 ---
 
-## Token Lifecycle Management
+## CSV Export
 
-- Refresh tokens are stored in the database
-- Tokens have expiration timestamps
-- Token rotation is enforced
-- Revoked tokens cannot be reused
-- Logout explicitly revokes tokens
+- Endpoint: `GET /api/profiles/export?format=csv`
+- Applies same filters and sorting as profile listing
+- Returns a downloadable CSV file
 
----
+### CSV Columns (Exact Order)
 
-## Secure Request Guard
-
-Protected routes use a centralized request guard that:
-
-- Extracts the `Authorization` header
-- Validates the access token
-- Attaches the authenticated user to the request
-- Blocks unauthorized access
+```
+id,
+name,
+gender,
+gender_probability,
+age,
+age_group,
+country_id,
+country_name,
+country_probability,
+created_at
+```
 
 ---
 
 ## Rate Limiting
 
-A custom in-memory rate limiter is applied globally.
+| Scope | Limit |
+|----|----|
+| `/auth/*` | 10 requests / minute |
+| All other endpoints | 60 requests / minute per user |
 
-### Limits
-
-| Route Category | Requests | Window |
-|---------------|----------|--------|
-| `/auth/*`     | 10       | 60 sec |
-| `/api/*`      | 60       | 60 sec |
-
-When exceeded, the API returns:
-```
-HTTP 429 Too Many Requests
-```
+- Exceeded limits return **429 Too Many Requests**
+- Implemented at the backend layer
 
 ---
 
-## Protected API Routes
+## Logging
 
-All application routes under `/api` are protected.
+Every request logs:
 
-Examples:
-```
-GET  /api/profiles
-GET  /api/profiles/{id}
-POST /api/profiles
-```
+- HTTP method
+- Endpoint path
+- Response status code
+- Response time
 
-Unauthenticated requests receive:
-```json
-{
-  "detail": "Unauthorized"
-}
-```
+This provides observability and auditability for production usage.
 
 ---
 
-## CLI (Command Line Interface)
+## Environment Configuration
 
-The project includes a CLI client for interacting with the API securely.
-
-### CLI Capabilities
-- OAuth-based login
-- Secure token storage
-- Authenticated API requests
-- Token reuse across sessions
+- All secrets and URLs are managed via **environment variables**
+- `.env` is used for local development
+- No credentials or API URLs are hardcoded
 
 ---
 
-## CLI Authentication Flow
+## Multi‑Interface Consistency
 
-### Login Command
-```
-python -m insighta.main login
-```
+The backend serves as the **single source of truth** for:
 
-### Flow Steps
-1. Browser opens for OAuth authentication
-2. User authorizes the application
-3. Local callback server receives authorization code
-4. Code is exchanged for tokens
-5. Tokens are saved locally
+- API consumers
+- CLI tool
+- Web portal
 
----
+All interfaces:
 
-## CLI Token Storage
-
-Tokens are stored locally at:
-```
-~/.insighta/credentials.json
-```
-
-This file is used automatically for authenticated CLI requests.
+- Use the same authentication system
+- Share the same authorization rules
+- Consume the same API contracts
 
 ---
 
-## Secure CLI Requests
+## Engineering Standards
 
-CLI API calls use a secure request helper that:
-- Loads stored tokens
-- Injects `Authorization` headers
-- Handles expired or missing tokens gracefully
-
----
-
-## Environment Variables
-
-The following environment variables are required:
-
-```
-SECRET_KEY=your-secret-key
-TOKEN_EXPIRE_MINUTES=60
-REFRESH_TOKEN_EXPIRE_DAYS=7
-```
+- Conventional commits (scoped)
+- Feature branches and PRs before merge
+- CI checks for linting and builds
+- Clean separation of concerns
 
 ---
 
-## Deployment (Vercel)
+## Scope Clarification
 
-### Important Notes
-- Editable installs (`-e .`) are **not supported**
-- CLI packages should **not** be included in `requirements.txt`
-- Only third-party dependencies should be listed
+This README **documents backend responsibilities only**.
 
-### Production Deployment
-```
-vercel --prod
-```
+- CLI usage and UX are documented in the **CLI repository**
+- Web portal UI details are documented in the **Web repository**
 
 ---
 
-## Security Guarantees
+## Status
 
-- Unauthorized access is blocked
-- Tokens are validated on every request
-- Refresh tokens are rotated and revocable
-- Rate limiting prevents abuse
-- CLI credentials are persisted securely
+Stage 3 backend requirements fully implemented
 
----
-
-## Stage 3 Completion Summary
-
-Stage 3 successfully introduces **robust security controls** to the Intelligence Query Engine, making it safe for real-world usage and deployment.
-
----
-
-## Author
-
-**Emmanuel Adekoya**  
-Backend Engineer  
-Stage 3 — Security & Authentication
-
-
-## Author Notes
-
-Built as part of the **Stage 2 and 3 submission** for the Profile Intelligence API challenge.
+The system is secure, role‑aware, rate‑limited, and ready for multi‑interface consumption.
 
