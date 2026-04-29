@@ -429,20 +429,248 @@ vercel --prod
 
 ---
 
-## Overall Project Summary
+## stage 2 Summary
 
 The Profile Intelligence Query Engine combines structured filtering with lightweight natural language parsing to provide flexible, efficient profile search functionality while maintaining clarity, predictability, and performance.
 
 ---
 
-## Author Notes
+# Intelligence Query Engine — Stage 3 (Security & Authentication)
 
-Built as part of the **Stage 2 submission** for the Profile Intelligence API challenge.
+## Overview
 
+Stage 3 of the **Intelligence Query Engine** focuses on **application security**, **authentication**, **authorization**, **rate limiting**, and **CLI-based secure access**.
+
+At this stage, the system ensures that:
+- Only authenticated users can access protected resources
+- API abuse is prevented through rate limiting
+- Tokens are securely issued, validated, and revoked
+- A CLI client can authenticate and interact securely with the backend
+- The backend is production-ready and deployable
+
+---
+
+## Stage 3 Scope
+
+This stage implements the following:
+
+- Token-based authentication
+- Secure request guards
+- Role-aware access control foundation
+- Rate limiting middleware
+- Refresh token lifecycle management
+- Secure CLI authentication flow
+- Deployment-safe backend configuration
+
+>  This README documents **Stage 3 only**.  
+> Stage 2 features are intentionally excluded.
+
+---
+
+## Authentication & Authorization
+
+### Authentication Method
+- Bearer token authentication
+- Tokens are issued after successful login
+- Tokens must be sent with every protected request
+
+### Authorization Header Format
+```
+Authorization: Bearer <access_token>
+```
+
+Requests without valid tokens are rejected.
+
+---
+
+## Authentication Endpoints
+
+### Login
+```
+POST /auth/login
+```
+
+**Response**
+```json
+{
+  "access_token": "<token>",
+  "token_type": "bearer"
+}
+```
+
+### Refresh Token
+```
+POST /auth/refresh
+```
+
+Rotates refresh tokens securely and issues a new access token.
+
+### Logout
+```
+POST /auth/logout
+```
+
+Revokes the refresh token and ends the session.
+
+---
+
+## Token Lifecycle Management
+
+- Refresh tokens are stored in the database
+- Tokens have expiration timestamps
+- Token rotation is enforced
+- Revoked tokens cannot be reused
+- Logout explicitly revokes tokens
+
+---
+
+## Secure Request Guard
+
+Protected routes use a centralized request guard that:
+
+- Extracts the `Authorization` header
+- Validates the access token
+- Attaches the authenticated user to the request
+- Blocks unauthorized access
+
+---
+
+## Rate Limiting
+
+A custom in-memory rate limiter is applied globally.
+
+### Limits
+
+| Route Category | Requests | Window |
+|---------------|----------|--------|
+| `/auth/*`     | 10       | 60 sec |
+| `/api/*`      | 60       | 60 sec |
+
+When exceeded, the API returns:
+```
+HTTP 429 Too Many Requests
+```
+
+---
+
+## Protected API Routes
+
+All application routes under `/api` are protected.
+
+Examples:
+```
+GET  /api/profiles
+GET  /api/profiles/{id}
+POST /api/profiles
+```
+
+Unauthenticated requests receive:
+```json
+{
+  "detail": "Unauthorized"
+}
+```
+
+---
+
+## CLI (Command Line Interface)
+
+The project includes a CLI client for interacting with the API securely.
+
+### CLI Capabilities
+- OAuth-based login
+- Secure token storage
+- Authenticated API requests
+- Token reuse across sessions
+
+---
+
+## CLI Authentication Flow
+
+### Login Command
+```
+python -m insighta.main login
+```
+
+### Flow Steps
+1. Browser opens for OAuth authentication
+2. User authorizes the application
+3. Local callback server receives authorization code
+4. Code is exchanged for tokens
+5. Tokens are saved locally
+
+---
+
+## CLI Token Storage
+
+Tokens are stored locally at:
+```
+~/.insighta/credentials.json
+```
+
+This file is used automatically for authenticated CLI requests.
+
+---
+
+## Secure CLI Requests
+
+CLI API calls use a secure request helper that:
+- Loads stored tokens
+- Injects `Authorization` headers
+- Handles expired or missing tokens gracefully
+
+---
+
+## Environment Variables
+
+The following environment variables are required:
+
+```
+SECRET_KEY=your-secret-key
+TOKEN_EXPIRE_MINUTES=60
+REFRESH_TOKEN_EXPIRE_DAYS=7
+```
+
+---
+
+## Deployment (Vercel)
+
+### Important Notes
+- Editable installs (`-e .`) are **not supported**
+- CLI packages should **not** be included in `requirements.txt`
+- Only third-party dependencies should be listed
+
+### Production Deployment
+```
+vercel --prod
+```
+
+---
+
+## Security Guarantees
+
+- Unauthorized access is blocked
+- Tokens are validated on every request
+- Refresh tokens are rotated and revocable
+- Rate limiting prevents abuse
+- CLI credentials are persisted securely
+
+---
+
+## Stage 3 Completion Summary
+
+Stage 3 successfully introduces **robust security controls** to the Intelligence Query Engine, making it safe for real-world usage and deployment.
 
 ---
 
 ## Author
 
 **Emmanuel Adekoya**  
-HNG Internship — Backend Engineering Track
+Backend Engineer  
+Stage 3 — Security & Authentication
+
+
+## Author Notes
+
+Built as part of the **Stage 2 and 3 submission** for the Profile Intelligence API challenge.
+
