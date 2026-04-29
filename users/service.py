@@ -30,3 +30,8 @@ def get_or_create_github_user(db: Session, github_user: dict) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+
+def get_user_by_id(db: Session, user_id: str) -> User | None:
+    """Retrieve user by UUID."""
+    return db.query(User).filter(User.id == user_id).first()

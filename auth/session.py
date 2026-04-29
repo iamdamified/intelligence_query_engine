@@ -16,7 +16,7 @@ def create_refresh_token(db, user_id: str):
         token=token_value,
         is_revoked=False,
         expires_at=datetime.now(timezone.utc)
-        + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES),
     )
 
     db.add(token)

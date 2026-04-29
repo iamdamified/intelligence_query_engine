@@ -3,6 +3,8 @@ import hashlib
 import secrets
 import webbrowser
 import requests
+import sys
+import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
 
@@ -45,6 +47,10 @@ class CallbackHandler(BaseHTTPRequestHandler):
         else:
             self.send_response(400)
             self.end_headers()
+    
+    def log_message(self, format, *args):
+        """Suppress HTTPServer log messages."""
+        pass
 
 
 def start_callback_server():

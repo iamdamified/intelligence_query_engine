@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # Tokens
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 3
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 5 #7
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 5  # Per spec: 5 minutes
 
     # 🔐 REQUIRED FOR GITHUB OAUTH (MISSING BEFORE)
     GITHUB_CLIENT_ID: str

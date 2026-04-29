@@ -26,6 +26,10 @@ def safe_request(method, url, **kwargs):
     headers = kwargs.pop("headers", {})
     headers.update(auth_headers())
 
+    # Ensure full URL
+    if not url.startswith("http"):
+        url = f"{BASE_URL}{url}"
+
     response = requests.request(method, url, headers=headers, **kwargs)
 
     # Token expired → try refresh

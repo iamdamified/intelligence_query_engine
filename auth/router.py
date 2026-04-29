@@ -8,9 +8,10 @@ from sqlalchemy.orm import Session
 from database import get_db
 from core.config import settings
 from auth.tokens import create_access_token
+from auth.dependencies import require_auth
 from auth.oauth.github import exchange_code_for_token, fetch_github_user
 from auth.oauth.state import save_state, validate_state, pop_verifier
-from users.service import get_or_create_github_user
+from users.service import get_or_create_github_user, get_user_by_id
 from users.models import RefreshToken
 from auth.oauth.pkce import generate_code_verifier, generate_code_challenge
 from auth.session import rotate_refresh_token, revoke_token
@@ -76,7 +77,7 @@ def github_callback(
         user_id=user.id,
         token=refresh_token_value,
         expires_at=datetime.now(timezone.utc)
-        + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES),
     )
 
     db.add(refresh_token)
@@ -123,4 +124,36 @@ def logout(payload: dict, db: Session = Depends(get_db)):
     return {
         "status": "success",
         "message": "Logged out successfully",
+    }
+
+
+# =========================
+# User Info
+# =========================
+@router.get("/me")
+def get_current_user(
+    payload: dict = Depends(require_auth),
+    db: Session = Depends(get_db),
+):
+    """
+    Returns current authenticated user info.
+    """
+    user_id = payload.get("sub")
+    user = get_user_by_id(db, user_id)
+    
+    if not user:
+        raise HTTPException(404, "User not found")
+    
+    return {
+        "status": "success",
+        "data": {
+            "id": str(user.id),
+            "username": user.username,
+            "email": user.email,
+            "avatar_url": user.avatar_url,
+            "role": user.role,
+            "is_active": user.is_active,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
+        }
     }

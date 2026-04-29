@@ -18,6 +18,7 @@ from auth.rbac import require_role
 from auth.guards import secure_request
 
 from core.responses import error
+from middleware.logging import LoggingMiddleware
 from fastapi.responses import StreamingResponse
 
 # --------------------
@@ -31,6 +32,9 @@ if os.getenv("ENV", "development") == "development":
 # --------------------
 app = FastAPI(title="Insighta Labs+")
 app.include_router(auth_router)
+
+# Add logging middleware (runs before CORS)
+app.add_middleware(LoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
