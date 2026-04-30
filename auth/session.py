@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import secrets
 
-from users.models import RefreshToken
+from users.models import RefreshToken, User
 from core.config import settings
 
 
@@ -37,6 +37,11 @@ def rotate_refresh_token(db, old_token: str):
     if record.expires_at < datetime.now(timezone.utc):
         return None
 
+    # fetch user (🔥 REQUIRED for role propagation)
+    user = db.query(User).filter_by(id=record.user_id).first()
+    if not user or not user.is_active:
+        return None
+
     # revoke old token
     record.is_revoked = True
 
@@ -45,7 +50,8 @@ def rotate_refresh_token(db, old_token: str):
 
     db.commit()
 
-    return new_token, record.user_id
+    # 🔥 return user object, not just user_id
+    return new_token, user
 
 
 # -----------------------------
@@ -54,6 +60,10 @@ def rotate_refresh_token(db, old_token: str):
 def revoke_token(db, token: str):
     record = db.query(RefreshToken).filter_by(token=token).first()
 
-    if record:
-        record.is_revoked = True
-        db.commit()
+    if not record:
+        return False 
+
+    record.is_revoked = True
+    db.commit()
+
+    return True  

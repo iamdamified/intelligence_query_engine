@@ -14,6 +14,7 @@ from utils import uuid7, utc_now, age_group, build_pagination
 from nlp_parser import parse_query
 
 from auth.router import router as auth_router
+from users.router import router as users_router
 from auth.rbac import require_role
 from auth.guards import secure_request
 
@@ -33,6 +34,7 @@ if os.getenv("ENV", "development") == "development":
 # --------------------
 app = FastAPI(title="Insighta Labs+")
 app.include_router(auth_router)
+app.include_router(users_router)
 
 # Add rate limiting middleware (before logging and CORS)
 app.add_middleware(RateLimitMiddleware)
