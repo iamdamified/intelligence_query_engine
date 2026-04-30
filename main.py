@@ -67,6 +67,39 @@ COUNTRY_MAP = {
 }
 
 # =========================================================
+# USER MANAGEMENT
+# =========================================================
+@app.get("/api/users/me")
+def get_current_user(
+    user: dict = Depends(require_role("admin", "analyst")),
+    _security: dict = Depends(secure_request),
+    db: Session = Depends(get_db),
+):
+    """Get current authenticated user info"""
+    from users.service import get_user_by_id
+    
+    user_id = user.get("sub")
+    current_user = get_user_by_id(db, user_id)
+    
+    if not current_user:
+        return error("User not found", 404)
+    
+    return {
+        "status": "success",
+        "data": {
+            "id": str(current_user.id),
+            "username": current_user.username,
+            "email": current_user.email,
+            "avatar_url": current_user.avatar_url,
+            "role": current_user.role,
+            "is_active": current_user.is_active,
+            "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+            "last_login_at": current_user.last_login_at.isoformat() if current_user.last_login_at else None,
+        }
+    }
+
+
+# =========================================================
 # CREATE PROFILE (ADMIN ONLY)
 # =========================================================
 @app.post("/api/profiles", status_code=201)
