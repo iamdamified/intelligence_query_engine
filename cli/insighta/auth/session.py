@@ -2,7 +2,7 @@ import os
 import json
 import requests
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://intelligence-query-engine.vercel.app"
 
 TOKEN_PATH = os.path.expanduser("~/.insighta/credentials.json")
 

@@ -1,7 +1,7 @@
 import requests
 from insighta.auth.session import get_access_token, refresh_access_token
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "https://intelligence-query-engine.vercel.app"
 
 
 # =========================

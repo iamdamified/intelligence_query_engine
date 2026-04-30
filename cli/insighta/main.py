@@ -8,7 +8,7 @@ app = typer.Typer(help="Insighta Labs CLI - Profile Intelligence Query Engine")
 
 # Create subcommands for profiles
 profiles_app = typer.Typer(help="Manage profiles")
-app.add_command(profiles_app, name="profiles")
+app.add_typer(profiles_app, name="profiles")
 
 
 # =========================
@@ -238,8 +238,10 @@ def profiles_export(
         response = safe_request("GET", "/api/profiles/export", params=clean_params)
         
         if response.status_code == 200:
-            # Save to file
-            filename = f"profiles_export.csv"
+            # Save to file with timestamp
+            from datetime import datetime
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"profiles_export_{timestamp}.csv"
             with open(filename, "w") as f:
                 f.write(response.text)
             print(f"✓ Profiles exported to {filename}")

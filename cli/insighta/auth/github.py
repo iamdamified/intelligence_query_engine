@@ -14,7 +14,7 @@ from insighta.auth.session import save_tokens
 # =========================
 # CONFIG
 # =========================
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.getenv("INSIGHTA_BASE_URL", "http://localhost:8000")
 REDIRECT_URI = "http://localhost:8765/callback"
 
 
@@ -40,6 +40,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
 
         if "code" in query:
             self.server.auth_code = query["code"][0]
+            self.server.auth_state = query.get("state", [None])[0]
 
             self.send_response(200)
             self.end_headers()
@@ -56,40 +57,43 @@ class CallbackHandler(BaseHTTPRequestHandler):
 def start_callback_server():
     server = HTTPServer(("localhost", 8765), CallbackHandler)
     server.auth_code = None
+    server.auth_state = None
 
     while server.auth_code is None:
         server.handle_request()
 
-    return server.auth_code
+    return server.auth_code, server.auth_state
 
 
 # =========================
 # MAIN LOGIN FLOW
 # =========================
 def login_flow():
-    verifier = generate_code_verifier()
-    challenge = generate_code_challenge(verifier)
-
-    # Step 1: Redirect to backend OAuth endpoint
-    auth_url = (
-        f"{BASE_URL}/auth/github"
-        f"?code_challenge={challenge}"
-        f"&redirect_uri={REDIRECT_URI}"
-    )
+    # Step 1: Get OAuth URL from backend (backend handles PKCE)
+    response = requests.get(f"{BASE_URL}/auth/github")
+    
+    if response.status_code != 302:
+        print("Failed to get OAuth URL from backend")
+        return
+    
+    auth_url = response.headers.get("location")
+    if not auth_url:
+        print("No redirect URL from backend")
+        return
 
     print("Opening browser for GitHub login...")
     webbrowser.open(auth_url)
 
     # Step 2: Wait for callback
     print("Waiting for callback...")
-    code = start_callback_server()
+    code, state = start_callback_server()
 
-    # Step 3: Exchange code for tokens
-    response = requests.post(
+    # Step 3: Exchange code for tokens via GET with query params
+    response = requests.get(
         f"{BASE_URL}/auth/github/callback",
-        json={
+        params={
             "code": code,
-            "code_verifier": verifier,
+            "state": state or "cli_state",
         },
     )
 
