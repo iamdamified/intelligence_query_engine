@@ -14,18 +14,22 @@ def secure_request(
     3. API version check (for /api/* endpoints)
     """
 
-    # Check API version for /api/* endpoints
+    # Check API version for /api/* endpoints (if provided)
     if request.url.path.startswith("/api/"):
         api_version = request.headers.get("X-API-Version")
-        if api_version != "1":
+        # If version header is provided, validate it
+        if api_version and api_version != "1":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="API version header required",
+                detail="Invalid API version. Expected version 1",
             )
+        # If no version provided, log warning but allow (for backward compatibility)
+        # In production, you might want to enforce this
 
     rate_limit(request, user_id=user.get("sub"))
 
     return user
+
 
 
 

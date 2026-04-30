@@ -19,6 +19,7 @@ from auth.guards import secure_request
 
 from core.responses import error
 from middleware.logging import LoggingMiddleware
+from middleware.rate_limiter_middleware import RateLimitMiddleware
 from fastapi.responses import StreamingResponse
 
 # --------------------
@@ -33,7 +34,10 @@ if os.getenv("ENV", "development") == "development":
 app = FastAPI(title="Insighta Labs+")
 app.include_router(auth_router)
 
-# Add logging middleware (runs before CORS)
+# Add rate limiting middleware (before logging and CORS)
+app.add_middleware(RateLimitMiddleware)
+
+# Add logging middleware
 app.add_middleware(LoggingMiddleware)
 
 app.add_middleware(
