@@ -114,6 +114,7 @@ The application is now ready for HNG Stage 3 resubmission. All identified issues
 ### Repository Links:
 - **GitHub:** https://github.com/iamdamified/intelligence_query_engine
 - **Live API:** https://intelligence-query-engine.vercel.app
+- **Live Web Portal:** https://web-portal-rust-three.vercel.app
 
 ### Commands for Submission:
 ```bash
