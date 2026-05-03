@@ -21,6 +21,7 @@ from auth.guards import secure_request
 from core.responses import error
 from middleware.logging import LoggingMiddleware
 from middleware.rate_limiter_middleware import RateLimitMiddleware
+from middleware.versioning import require_api_version
 from fastapi.responses import StreamingResponse
 
 # --------------------
@@ -32,7 +33,7 @@ if os.getenv("ENV", "development") == "development":
 # --------------------
 # APP SETUP
 # --------------------
-app = FastAPI(title="Insighta Labs+")
+app = FastAPI(title="Insighta Labs+", dependencies=[Depends(require_api_version)])
 app.include_router(auth_router)
 app.include_router(users_router)
 
