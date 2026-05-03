@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_SECRET: str
     GITHUB_REDIRECT_URI: str
 
+    # 🌐 WEB PORTAL URL (for OAuth redirects)
+    WEB_PORTAL_URL: str = "https://web-portal-rust-three.vercel.app/dashboard"
+
     class Config:
         env_file = ".env"
         extra = "ignore"
