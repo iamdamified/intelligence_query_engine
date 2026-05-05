@@ -44,20 +44,16 @@ def get_all(
 
 def get_profiles(
     db: Session,
-    filters: tuple | None,   # ⬅ normalized filters (tuple)
+    filters: dict | None,   # ✅ dict again
     sort_by: str | None,
     order: str,
     page: int,
     limit: int,
 ):
     start = time.perf_counter()
-
     query = db.query(Profile)
 
-    # 🔑 Convert normalized tuple back to dict for ORM usage
     if filters:
-        filters = dict(filters)
-
         if "gender" in filters:
             query = query.filter(Profile.gender == filters["gender"])
 
@@ -83,7 +79,7 @@ def get_profiles(
                 Profile.country_probability >= filters["min_country_probability"]
             )
 
-    # Count only when needed (performance optimization)
+    # ✅ FIX 2: count only when needed
     total = query.count() if page == 1 else None
 
     if sort_by:
@@ -103,99 +99,6 @@ def get_profiles(
 
     return total, data
 
-# def get_profiles(
-#     db: Session,
-#     filters: dict | None,
-#     sort_by: str | None,
-#     order: str,
-#     page: int,
-#     limit: int,
-# ):
-#     query = db.query(Profile)
-
-#     if filters:
-#         if "gender" in filters:
-#             query = query.filter(Profile.gender == filters["gender"])
-
-#         if "age_group" in filters:
-#             query = query.filter(Profile.age_group == filters["age_group"])
-
-#         if "country_id" in filters:
-#             query = query.filter(Profile.country_id == filters["country_id"])
-
-#         if "min_age" in filters:
-#             query = query.filter(Profile.age >= filters["min_age"])
-
-#         if "max_age" in filters:
-#             query = query.filter(Profile.age <= filters["max_age"])
-
-#         # REQUIRED BY SPEC
-#         if "min_gender_probability" in filters:
-#             query = query.filter(
-#                 Profile.gender_probability >= filters["min_gender_probability"]
-#             )
-
-#         # REQUIRED BY SPEC
-#         if "min_country_probability" in filters:
-#             query = query.filter(
-#                 Profile.country_probability >= filters["min_country_probability"]
-#             )
-
-#     total = query.count()
-
-#     if sort_by:
-#         column = SORT_FIELDS.get(sort_by)
-#         if not column:
-#             return None, None
-#         query = query.order_by(
-#             column.desc() if order == "desc" else column.asc()
-#         )
-
-#     offset = (page - 1) * limit
-#     data = query.offset(offset).limit(limit).all()
-
-#     return total, data
-
-# def get_profiles(
-#     db: Session,
-#     filters: dict | None,
-#     sort_by: str | None,
-#     order: str,
-#     page: int,
-#     limit: int,
-# ):
-#     query = db.query(Profile)
-
-#     if filters:
-#         if "gender" in filters:
-#             query = query.filter(Profile.gender == filters["gender"])
-
-#         if "age_group" in filters:
-#             query = query.filter(Profile.age_group == filters["age_group"])
-
-#         if "country_id" in filters:
-#             query = query.filter(Profile.country_id == filters["country_id"])
-
-#         if "min_age" in filters:
-#             query = query.filter(Profile.age >= filters["min_age"])
-
-#         if "max_age" in filters:
-#             query = query.filter(Profile.age <= filters["max_age"])
-
-#     total = query.count()
-
-#     if sort_by:
-#         column = SORT_FIELDS.get(sort_by)
-#         if not column:
-#             return None, None
-#         query = query.order_by(
-#             column.desc() if order == "desc" else column.asc()
-#         )
-
-#     offset = (page - 1) * limit
-#     data = query.offset(offset).limit(limit).all()
-
-#     return total, data
 
 
 # ---------- Write helpers ----------
@@ -219,85 +122,3 @@ def delete(db: Session, profile: Profile):
         db.rollback()
         raise
 
-
-
-# from sqlalchemy.orm import Session
-# from models import Profile
-
-# SORT_FIELDS = {
-#     "age": Profile.age,
-#     "created_at": Profile.created_at,
-#     "gender_probability": Profile.gender_probability,
-# }
-
-# def get_profiles(db: Session, filters: dict, sort_by: str, order: str, page: int, limit: int):
-#     query = db.query(Profile)
-
-#     if filters:
-#         if "gender" in filters:
-#             query = query.filter(Profile.gender == filters["gender"])
-
-#         if "age_group" in filters:
-#             query = query.filter(Profile.age_group == filters["age_group"])
-
-#         if "country_id" in filters:
-#             query = query.filter(Profile.country_id == filters["country_id"])
-
-#         if "min_age" in filters:
-#             query = query.filter(Profile.age >= filters["min_age"])
-
-#         if "max_age" in filters:
-#             query = query.filter(Profile.age <= filters["max_age"])
-
-#     total = query.count()
-
-#     if sort_by:
-#         column = SORT_FIELDS.get(sort_by)
-#         if not column:
-#             return None, None
-#         query = query.order_by(column.desc() if order == "desc" else column.asc())
-
-#     offset = (page - 1) * limit
-#     data = query.offset(offset).limit(limit).all()
-
-#     return total, data
-
-
-
-# from sqlalchemy.orm import Session
-# from models import Profile
-# from sqlalchemy.exc import SQLAlchemyError
-
-# def get_by_name(db: Session, name: str):
-#     return db.query(Profile).filter(Profile.name == name).first()
-
-# def get_by_id(db: Session, id: str):
-#     return db.query(Profile).filter(Profile.id == id).first()
-
-# def get_all(db: Session, gender=None, country_id=None, age_group=None):
-#     q = db.query(Profile)
-#     if gender:
-#         q = q.filter(Profile.gender == gender.lower())
-#     if country_id:
-#         q = q.filter(Profile.country_id == country_id.upper())
-#     if age_group:
-#         q = q.filter(Profile.age_group == age_group.lower())
-#     return q.all()
-
-# def create(db: Session, profile: Profile):
-#     try:
-#         db.add(profile)
-#         db.commit()
-#         db.refresh(profile)
-#         return profile
-#     except SQLAlchemyError:
-#         db.rollback()
-#         raise
-
-# def delete(db: Session, profile: Profile):
-#     try:
-#         db.delete(profile)
-#         db.commit()
-#     except SQLAlchemyError:
-#         db.rollback()
-#         raise

@@ -1,0 +1,17 @@
+name,gender,age,country_id
+john,male,30,NG
+mary,female,25,NG
+alex,male,40,US
+linda,female,22,GB
+sam,male,19,CA
+eva,female,35,FR
+tom,male,50,GH
+anna,female,28,KE
+paul,male,45,ZA
+rose,female,33,NG
+john,male,30,NG
+invalidgender,unknown,25,NG
+negativeage,female,-4,US
+missingcountry,male,20,
+, female,23,NG
+brokenrow
