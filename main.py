@@ -160,7 +160,7 @@ async def upload_profiles_csv(
 
     BATCH_SIZE = 1000
     batch = []
-    seen_names = set()   # ✅ FIX: track duplicates inside file
+    seen_names = set()   # track duplicates inside file and store
 
     try:
         stream = TextIOWrapper(file.file, encoding="utf-8-sig")
