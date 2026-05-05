@@ -2,8 +2,8 @@ import secrets
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -17,6 +17,7 @@ from users.service import get_or_create_github_user, get_user_by_id, create_test
 from users.models import RefreshToken
 from auth.oauth.pkce import generate_code_verifier, generate_code_challenge
 from auth.session import rotate_refresh_token, revoke_token
+
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -36,7 +37,7 @@ class LogoutRequest(BaseModel):
 
 
 # =========================
-# CLI / API OAuth
+# OAuth Login
 # =========================
 @router.get("/github")
 def github_login():
@@ -55,12 +56,13 @@ def github_login():
         "code_challenge_method": "S256",
     }
 
-    url = f"{GITHUB_AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
-    return RedirectResponse(url)
+    return RedirectResponse(
+        f"{GITHUB_AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
+    )
 
 
 # =========================
-# 🔥 CLI + GRADER CALLBACK
+# OAuth Callback (CLI + GRADER)
 # =========================
 @router.get("/github/callback")
 def github_callback(
@@ -71,9 +73,9 @@ def github_callback(
     if not code:
         raise HTTPException(400, "Missing code parameter")
 
-    # ---------- TEST BYPASS (HNG REQUIRED) ----------
+    # 🔥 REQUIRED TEST BYPASS
     if code in {"test_code", "test_code_admin", "test_code_analyst"}:
-        role = "admin" if code != "test_code_analyst" else "analyst"
+        role = "analyst" if code == "test_code_analyst" else "admin"
         user = create_test_user(db, username=f"test_{role}", role=role)
 
         access_token = create_access_token({
@@ -96,7 +98,7 @@ def github_callback(
             "refresh_token": refresh_value,
         }
 
-    # ---------- REAL GITHUB FLOW ----------
+    # Real GitHub OAuth
     if not state or not validate_state(state):
         raise HTTPException(400, "Invalid OAuth state")
 
@@ -108,7 +110,10 @@ def github_callback(
     github_user = fetch_github_user(github_token)
     user = get_or_create_github_user(db, github_user)
 
-    access_token = create_access_token({"sub": str(user.id), "role": user.role})
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role,
+    })
 
     refresh_value = secrets.token_urlsafe(48)
     db.add(RefreshToken(
@@ -127,85 +132,7 @@ def github_callback(
 
 
 # =========================
-# 🌐 WEB OAUTH ENTRY
-# =========================
-@router.get("/web/github")
-def web_github_login():
-    state = secrets.token_urlsafe(32)
-    verifier = generate_code_verifier()
-    challenge = generate_code_challenge(verifier)
-
-    save_state(state, verifier)
-
-    params = {
-        "client_id": settings.GITHUB_CLIENT_ID,
-        "redirect_uri": settings.GITHUB_REDIRECT_URI,
-        "scope": SCOPES,
-        "state": state,
-        "code_challenge": challenge,
-        "code_challenge_method": "S256",
-    }
-
-    return RedirectResponse(
-        f"{GITHUB_AUTHORIZE_URL}?{urllib.parse.urlencode(params)}"
-    )
-
-
-# =========================
-# ✅ WEB CALLBACK (COOKIE FLOW)
-# =========================
-@router.get("/web/github/callback")
-def web_github_callback(
-    code: str,
-    state: str,
-    response: Response,
-    db: Session = Depends(get_db),
-):
-    if not validate_state(state):
-        raise HTTPException(400, "Invalid OAuth state")
-
-    verifier = pop_verifier(state)
-    github_token = exchange_code_for_token(code, verifier)
-    github_user = fetch_github_user(github_token)
-
-    user = get_or_create_github_user(db, github_user)
-
-    access_token = create_access_token(
-        {"sub": str(user.id), "role": user.role}
-    )
-
-    refresh_value = secrets.token_urlsafe(48)
-    db.add(RefreshToken(
-        user_id=user.id,
-        token=refresh_value,
-        expires_at=datetime.now(timezone.utc)
-        + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES),
-    ))
-    db.commit()
-
-    # 🔐 HTTP-ONLY COOKIES (WEB ONLY)
-    response.set_cookie(
-        "access_token",
-        access_token,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=180,
-    )
-    response.set_cookie(
-        "refresh_token",
-        refresh_value,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        max_age=300,
-    )
-
-    return RedirectResponse(settings.WEB_PORTAL_URL)
-
-
-# =========================
-# TOKEN LIFECYCLE
+# Token Lifecycle
 # =========================
 @router.post("/refresh")
 def refresh_access_token(
@@ -237,7 +164,7 @@ def logout(payload: LogoutRequest, db: Session = Depends(get_db)):
 
 
 # =========================
-# USER INFO
+# User Info
 # =========================
 @router.get("/me")
 def get_current_user(

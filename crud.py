@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from models import Profile
+import time
 
 SORT_FIELDS = {
     "age": Profile.age,
@@ -39,19 +40,24 @@ def get_all(
     return query.all()
 
 
-# ---------- Stage 2 NLP + pagination query ----------
+# ---------- Stage 4B: Normalized Query Execution ----------
 
 def get_profiles(
     db: Session,
-    filters: dict | None,
+    filters: tuple | None,   # ⬅ normalized filters (tuple)
     sort_by: str | None,
     order: str,
     page: int,
     limit: int,
 ):
+    start = time.perf_counter()
+
     query = db.query(Profile)
 
+    # 🔑 Convert normalized tuple back to dict for ORM usage
     if filters:
+        filters = dict(filters)
+
         if "gender" in filters:
             query = query.filter(Profile.gender == filters["gender"])
 
@@ -67,24 +73,24 @@ def get_profiles(
         if "max_age" in filters:
             query = query.filter(Profile.age <= filters["max_age"])
 
-        # REQUIRED BY SPEC
         if "min_gender_probability" in filters:
             query = query.filter(
                 Profile.gender_probability >= filters["min_gender_probability"]
             )
 
-        # REQUIRED BY SPEC
         if "min_country_probability" in filters:
             query = query.filter(
                 Profile.country_probability >= filters["min_country_probability"]
             )
 
-    total = query.count()
+    # Count only when needed (performance optimization)
+    total = query.count() if page == 1 else None
 
     if sort_by:
         column = SORT_FIELDS.get(sort_by)
         if not column:
             return None, None
+
         query = query.order_by(
             column.desc() if order == "desc" else column.asc()
         )
@@ -92,7 +98,63 @@ def get_profiles(
     offset = (page - 1) * limit
     data = query.offset(offset).limit(limit).all()
 
+    duration_ms = (time.perf_counter() - start) * 1000
+    print(f"[PERF] get_profiles took {duration_ms:.2f}ms")
+
     return total, data
+
+# def get_profiles(
+#     db: Session,
+#     filters: dict | None,
+#     sort_by: str | None,
+#     order: str,
+#     page: int,
+#     limit: int,
+# ):
+#     query = db.query(Profile)
+
+#     if filters:
+#         if "gender" in filters:
+#             query = query.filter(Profile.gender == filters["gender"])
+
+#         if "age_group" in filters:
+#             query = query.filter(Profile.age_group == filters["age_group"])
+
+#         if "country_id" in filters:
+#             query = query.filter(Profile.country_id == filters["country_id"])
+
+#         if "min_age" in filters:
+#             query = query.filter(Profile.age >= filters["min_age"])
+
+#         if "max_age" in filters:
+#             query = query.filter(Profile.age <= filters["max_age"])
+
+#         # REQUIRED BY SPEC
+#         if "min_gender_probability" in filters:
+#             query = query.filter(
+#                 Profile.gender_probability >= filters["min_gender_probability"]
+#             )
+
+#         # REQUIRED BY SPEC
+#         if "min_country_probability" in filters:
+#             query = query.filter(
+#                 Profile.country_probability >= filters["min_country_probability"]
+#             )
+
+#     total = query.count()
+
+#     if sort_by:
+#         column = SORT_FIELDS.get(sort_by)
+#         if not column:
+#             return None, None
+#         query = query.order_by(
+#             column.desc() if order == "desc" else column.asc()
+#         )
+
+#     offset = (page - 1) * limit
+#     data = query.offset(offset).limit(limit).all()
+
+#     return total, data
 
 # def get_profiles(
 #     db: Session,

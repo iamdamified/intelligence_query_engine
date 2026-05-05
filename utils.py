@@ -1,5 +1,6 @@
 import uuid, time
 from datetime import datetime, timezone
+from typing import Dict, Any, Tuple
 
 def uuid7():
     ts = int(time.time() * 1000)
@@ -44,3 +45,35 @@ def build_pagination(page: int, limit: int, total: int, base_url: str, query_par
             "prev": build_url(page - 1 if page > 1 else None),
         },
     }
+
+
+
+
+def normalize_filters(filters: Dict[str, Any]) -> Tuple[Tuple[str, Any], ...]:
+    """
+    Convert a parsed filter dict into a deterministic, hashable structure.
+
+    - Lowercases string values where applicable
+    - Uppercases country codes
+    - Sorts keys alphabetically
+    - Returns a tuple of (key, value) pairs
+
+    This guarantees identical cache keys for semantically identical queries.
+    """
+
+    if not filters:
+        return tuple()
+
+    normalized = {}
+
+    for key, value in filters.items():
+        if isinstance(value, str):
+            if key == "country_id":
+                normalized[key] = value.upper()
+            else:
+                normalized[key] = value.lower()
+        else:
+            normalized[key] = value
+
+    # 🔑 Sort keys deterministically
+    return tuple(sorted(normalized.items()))

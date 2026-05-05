@@ -1,11 +1,11 @@
-from fastapi import FastAPI, Depends, Response, Query
+from fastapi import FastAPI, Depends, Response, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import httpx
 import re
 import os
 import csv
-from io import StringIO
+from io import StringIO, TextIOWrapper
 
 from database import Base, engine, get_db
 from models import Profile
@@ -23,7 +23,8 @@ from middleware.logging import LoggingMiddleware
 from middleware.rate_limiter_middleware import RateLimitMiddleware
 from middleware.versioning import require_api_version
 from fastapi.responses import StreamingResponse
-
+from utils import normalize_filters
+from sqlalchemy.dialects.postgresql import insert
 # --------------------
 # DB INIT (DEV ONLY)
 # --------------------
@@ -45,9 +46,13 @@ app.add_middleware(LoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000",
+    allow_origins=["https://localhost:3000",
     "https://web-portal-rust-three.vercel.app",
     "https://intelligence-query-engine.vercel.app",
+    "https://127.0.0.1:8000",
+    "http://localhost:3000",
+    "http://web-portal-rust-three.vercel.app",
+    "http://intelligence-query-engine.vercel.app",
     "http://127.0.0.1:8000"],
     allow_credentials=True,
     allow_methods=["*"],
@@ -188,11 +193,11 @@ def list_profiles(
 ):
 
     if q:
-        filters = parse_query(q)
-        if not filters:
+        raw_filters = parse_query(q)
+        if not raw_filters:
             return error("Unable to interpret query", 400)
     else:
-        filters = {
+        raw_filters = {
             k: v for k, v in {
                 "gender": gender,
                 "age_group": age_group,
@@ -201,6 +206,9 @@ def list_profiles(
                 "max_age": max_age,
             }.items() if v is not None
         }
+
+    # 🔑 Normalize filters (Stage 4B requirement)
+    filters = normalize_filters(raw_filters)
 
     total, data = get_profiles(
         db=db,
@@ -375,6 +383,107 @@ def delete_profile(
         "message": "Profile deleted",
     }
 
+
+# =========================================================
+# LARGE CSV DATA INGESTION(UPLOAD up to 500,000 rows)
+# =========================================================
+@app.post("/api/profiles/upload")
+async def upload_profiles_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_role("admin")),
+    _security: dict = Depends(secure_request),
+):
+    if not file.filename.endswith(".csv"):
+        return error("Only CSV files are supported", 400)
+
+    total_rows = 0
+    inserted = 0
+    skipped = 0
+    reasons = {
+        "duplicate_name": 0,
+        "invalid_age": 0,
+        "invalid_gender": 0,
+        "missing_fields": 0,
+        "malformed_row": 0,
+    }
+
+    BATCH_SIZE = 1000
+    batch = []
+
+    try:
+        stream = TextIOWrapper(file.file, encoding="utf-8")
+        reader = csv.DictReader(stream)
+
+        for row in reader:
+            total_rows += 1
+
+            try:
+                name = row.get("name", "").strip().lower()
+                gender = row.get("gender", "").strip().lower()
+                age = int(row.get("age", -1))
+                country_id = row.get("country_id", "").strip().upper()
+
+                if not name or not gender or not country_id:
+                    skipped += 1
+                    reasons["missing_fields"] += 1
+                    continue
+
+                if gender not in {"male", "female"}:
+                    skipped += 1
+                    reasons["invalid_gender"] += 1
+                    continue
+
+                if age < 0:
+                    skipped += 1
+                    reasons["invalid_age"] += 1
+                    continue
+
+                if get_by_name(db, name):
+                    skipped += 1
+                    reasons["duplicate_name"] += 1
+                    continue
+
+                batch.append({
+                    "id": uuid7(),
+                    "name": name,
+                    "gender": gender,
+                    "gender_probability": 1.0,
+                    "age": age,
+                    "age_group": age_group(age),
+                    "country_id": country_id,
+                    "country_name": COUNTRY_MAP.get(country_id, country_id),
+                    "country_probability": 1.0,
+                    "created_at": utc_now(),
+                })
+
+                if len(batch) >= BATCH_SIZE:
+                    db.execute(insert(Profile), batch)
+                    db.commit()
+                    inserted += len(batch)
+                    batch.clear()
+
+            except Exception:
+                skipped += 1
+                reasons["malformed_row"] += 1
+                continue
+
+        # Insert remaining rows
+        if batch:
+            db.execute(insert(Profile), batch)
+            db.commit()
+            inserted += len(batch)
+
+    except Exception:
+        return error("Failed to process CSV file", 500)
+
+    return {
+        "status": "success",
+        "total_rows": total_rows,
+        "inserted": inserted,
+        "skipped": skipped,
+        "reasons": reasons,
+    }
 
 # --------------------
 # SERIALIZER
