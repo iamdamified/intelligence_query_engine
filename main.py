@@ -334,7 +334,148 @@ def get_profile(
         "data": serialize_profile(profile),
     }
 
+# =========================================================
+# CSV DATA INGESTION (FINAL – SAFE & OPTIMIZED)
+# =========================================================
+@app.post("/api/profiles/upload")
+def upload_profiles_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_role("admin")),
+    _security: dict = Depends(secure_request),
+):
+    if not file.filename.lower().endswith(".csv"):
+        return error("Only CSV files are supported", 400)
 
+    TOTAL_ROW_LIMIT = 100_000
+    BATCH_SIZE = 1000
+
+    total_rows = 0
+    inserted = 0
+    skipped = 0
+
+    reasons = {
+        "duplicate_name": 0,
+        "invalid_age": 0,
+        "invalid_gender": 0,
+        "missing_fields": 0,
+        "malformed_row": 0,
+        "row_limit_exceeded": 0,
+    }
+
+    batch = []
+    seen_names = set()
+
+    try:
+        # ----------------------------------
+        # PRELOAD EXISTING NAMES (CRITICAL)
+        # ----------------------------------
+        existing_names = {
+            n[0] for n in db.query(Profile.name).all()
+        }
+
+        stream = TextIOWrapper(file.file, encoding="utf-8-sig")
+        reader = csv.DictReader(stream)
+
+        for row in reader:
+            total_rows += 1
+
+            if total_rows > TOTAL_ROW_LIMIT:
+                reasons["row_limit_exceeded"] += 1
+                break
+
+            try:
+                name = (row.get("name") or "").strip().lower()
+                gender = (row.get("gender") or "").strip().lower()
+                country_id = (row.get("country_id") or "").strip().upper()
+
+                try:
+                    age = int(row.get("age"))
+                except (TypeError, ValueError):
+                    skipped += 1
+                    reasons["invalid_age"] += 1
+                    continue
+
+                # -------------------------
+                # VALIDATION
+                # -------------------------
+                if not name or not gender or not country_id:
+                    skipped += 1
+                    reasons["missing_fields"] += 1
+                    continue
+
+                if gender not in {"male", "female"}:
+                    skipped += 1
+                    reasons["invalid_gender"] += 1
+                    continue
+
+                if age < 0 or age > 120:
+                    skipped += 1
+                    reasons["invalid_age"] += 1
+                    continue
+
+                # -------------------------
+                # DUPLICATE CHECK
+                # -------------------------
+                if (
+                    name in seen_names
+                    or name in existing_names
+                ):
+                    skipped += 1
+                    reasons["duplicate_name"] += 1
+                    continue
+
+                seen_names.add(name)
+
+                # -------------------------
+                # BUILD BATCH ROW
+                # -------------------------
+                batch.append({
+                    "id": uuid7(),
+                    "name": name,
+                    "gender": gender,
+                    "gender_probability": 1.0,
+                    "age": age,
+                    "age_group": age_group(age),
+                    "country_id": country_id,
+                    "country_name": COUNTRY_MAP.get(country_id, country_id),
+                    "country_probability": 1.0,
+                    "created_at": utc_now(),
+                })
+
+                # -------------------------
+                # BATCH INSERT
+                # -------------------------
+                if len(batch) >= BATCH_SIZE:
+                    db.execute(insert(Profile.__table__), batch)
+                    db.commit()
+                    inserted += len(batch)
+                    batch.clear()
+
+            except Exception:
+                skipped += 1
+                reasons["malformed_row"] += 1
+
+        # ----------------------------------
+        # FINAL INSERT
+        # ----------------------------------
+        if batch:
+            db.execute(insert(Profile.__table__), batch)
+            db.commit()
+            inserted += len(batch)
+
+    except Exception as e:
+        db.rollback()
+        traceback.print_exc()
+        return error(f"Failed to process CSV file: {str(e)}", 500)
+
+    return {
+        "status": "success",
+        "total_rows": total_rows,
+        "inserted": inserted,
+        "skipped": skipped,
+        "reasons": reasons,
+    }
 
 # =========================================================
 # CSV DATA INGESTION (FIXED)
