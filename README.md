@@ -275,7 +275,8 @@ All interfaces:
 This README **documents backend responsibilities only**.
 
 - CLI usage and UX are documented in the **CLI repository**
-- Web portal UI details are documented in the **Web repository**
+- Web portal UI details are documented in the **Web repository** https://github.com/iamdamified/insighta-web-portal
+- Web Page **Deployed Webpage** https://web-portal-rust-three.vercel.app/
 
 ---
 
